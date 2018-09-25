@@ -104,3 +104,18 @@ case class ImageName(
   @deprecated("Use toString instead.", "0.4.0")
   def name = toString
 }
+
+/**
+ * Credentials for private Docker registry.
+ * @param userName User name.
+ * @param password Password.
+ * @param email Email.
+ * @param host Optional Docker registry host address.
+ */
+case class RegistryCredentials(
+  userName: String,
+  password: String,
+  email: String,
+  host: Option[String] = None
+)
+

@@ -16,12 +16,13 @@ object DockerBuild {
    * @param dockerPath path to the docker binary
    * @param buildOptions options for the build command
    * @param log logger
+   * @param auth credentials to authenticate to Docker registry
    */
   def apply(dockerfile: DockerfileLike, processor: DockerfileProcessor, imageNames: Seq[ImageName],
-            buildOptions: BuildOptions, stageDir: File, dockerPath: String, log: Logger): ImageId = {
+            buildOptions: BuildOptions, stageDir: File, dockerPath: String, log: Logger, auth: Option[RegistryCredentials]): ImageId = {
     val staged = processor(dockerfile, stageDir)
 
-    apply(staged, imageNames, buildOptions, stageDir, dockerPath, log)
+    apply(staged, imageNames, buildOptions, stageDir, dockerPath, log, auth)
   }
 
   /**
@@ -33,8 +34,9 @@ object DockerBuild {
    * @param dockerPath path to the docker binary
    * @param buildOptions options for the build command
    * @param log logger
+   * @param auth credentials to authenticate to Docker registry
    */
-  def apply(staged: StagedDockerfile, imageNames: Seq[ImageName], buildOptions: BuildOptions, stageDir: File, dockerPath: String, log: Logger): ImageId = {
+  def apply(staged: StagedDockerfile, imageNames: Seq[ImageName], buildOptions: BuildOptions, stageDir: File, dockerPath: String, log: Logger, auth: Option[RegistryCredentials]): ImageId = {
     log.debug("Building Dockerfile:\n" + staged.instructionsString)
 
     log.debug(s"Preparing stage directory '${stageDir.getPath}'")
@@ -42,7 +44,7 @@ object DockerBuild {
     clean(stageDir)
     createDockerfile(staged, stageDir)
     prepareFiles(staged)
-    buildAndTag(imageNames, stageDir, dockerPath, buildOptions, log)
+    buildAndTag(imageNames, stageDir, dockerPath, buildOptions, log, auth)
   }
 
   private[sbtdocker] def clean(stageDir: File) = {
@@ -62,14 +64,14 @@ object DockerBuild {
 
   private val SuccessfullyBuilt = "^Successfully built ([0-9a-f]+)$".r
 
-  private[sbtdocker] def buildAndTag(imageNames: Seq[ImageName], stageDir: File, dockerPath: String, buildOptions: BuildOptions, log: Logger): ImageId = {
+  private[sbtdocker] def buildAndTag(imageNames: Seq[ImageName], stageDir: File, dockerPath: String, buildOptions: BuildOptions, log: Logger, auth: Option[RegistryCredentials]): ImageId = {
     val processLogger = ProcessLogger({ line =>
       log.info(line)
     }, { line =>
       log.info(line)
     })
 
-    val imageId = build(stageDir, dockerPath, buildOptions, log, processLogger)
+    val imageId = build(stageDir, dockerPath, buildOptions, log, processLogger, auth)
 
     imageNames.foreach { name =>
       DockerTag(imageId, name, dockerPath, log)
@@ -78,7 +80,21 @@ object DockerBuild {
     imageId
   }
 
-  private[sbtdocker] def build(stageDir: File, dockerPath: String, buildOptions: BuildOptions, log: Logger, processLogger: ProcessLogger): ImageId = {
+  private[sbtdocker] def build(stageDir: File, dockerPath: String, buildOptions: BuildOptions, log: Logger, processLogger: ProcessLogger, auth: Option[RegistryCredentials]): ImageId = {
+    auth match {
+      case Some(a) =>
+        a.host match {
+          case Some(h) =>
+            val login = dockerPath :: "login" :: "-u" :: a.userName :: "-p" :: a.password :: h :: Nil
+            log.debug(s"Running command: '${login.mkString(" ")}'")
+            val loginProcess = Process(login)
+            val loginExitValue = loginProcess ! processLogger
+            if (loginExitValue != 0) sys.error("Failed to login")
+          case None => // no need to login if host is not specified as it defaults to docker.io.
+        }
+      case None =>
+    }
+
     val flags = buildFlags(buildOptions)
     val command = dockerPath :: "build" :: flags ::: "." :: Nil
     log.debug(s"Running command: '${command.mkString(" ")}' in '${stageDir.absString}'")

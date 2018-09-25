@@ -13,6 +13,7 @@ object DockerPlugin extends AutoPlugin {
     val imageName = DockerKeys.imageName
     val imageNames = DockerKeys.imageNames
     val buildOptions = DockerKeys.buildOptions
+    val registryCredentials = DockerKeys.registryCredentials
 
     type Dockerfile = sbtdocker.Dockerfile
     val ImageId = sbtdocker.ImageId
@@ -24,6 +25,9 @@ object DockerPlugin extends AutoPlugin {
 
     val CopyFile = sbtdocker.staging.CopyFile
     type CopyFile = sbtdocker.staging.CopyFile
+
+    val RegistryCredentials = sbtdocker.RegistryCredentials
+    type RegistryCredentials = sbtdocker.RegistryCredentials
 
     /**
      * Settings to automatically build a Docker image for a JVM application.
